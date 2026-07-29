@@ -11,16 +11,14 @@ venv/
 .idea/
 .vscode/
 
-# Preprocessed & raw images (regenerated automatically via scratch/batch_process_all_images.py in <15s)
+# Raw images (large unenhanced dataset)
 images/
-data/processed_images/
 
-# Local model weights & large scratch archives
+# Local model weights & logs
 models/
 *.pt
 *.pth
 *.bin
-*.zip
 *.log
 .DS_Store
 Thumbs.db
