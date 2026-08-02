@@ -4,6 +4,7 @@ Complete PyTorch Training & Validation Pipeline for R.O.A.D. Barbados Historic H
 Features:
 - Fold-based training (5-Fold Stratified CV)
 - AdamW Optimizer + CosineAnnealingLR Scheduler
+- Mixed Precision Training (torch.cuda.amp) for VRAM efficiency & speed
 - PyTorch CTCLoss integration
 - Per-epoch validation evaluation with Zindi Weighted Metric (0.5 CER + 0.5 WER)
 - Model checkpoint saving (models/crnn_best_fold{X}.pt)
@@ -36,6 +37,7 @@ def train_epoch(
     dataloader: DataLoader,
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
+    scaler: Optional[torch.cuda.amp.GradScaler],
     device: torch.device
 ) -> float:
     """Runs single training epoch and returns average CTC loss."""
@@ -51,28 +53,32 @@ def train_epoch(
 
         optimizer.zero_grad()
 
-        # Forward pass
-        logits = model(images)  # (B, W_seq, Vocab_Size)
+        if scaler is not None and device.type == 'cuda':
+            with torch.cuda.amp.autocast():
+                logits = model(images)  # (B, W_seq, Vocab_Size)
+                log_probs = F.log_softmax(logits, dim=2).permute(1, 0, 2)
+                loss = criterion(log_probs, targets, input_lengths, target_lengths)
 
-        # CTCLoss expects log_probs of shape (Time_First: W_seq, Batch, Vocab_Size)
-        log_probs = F.log_softmax(logits, dim=2).permute(1, 0, 2)
+            if not (torch.isnan(loss) or torch.isinf(loss)):
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+                scaler.step(optimizer)
+                scaler.update()
+        else:
+            logits = model(images)
+            log_probs = F.log_softmax(logits, dim=2).permute(1, 0, 2)
+            loss = criterion(log_probs, targets, input_lengths, target_lengths)
 
-        loss = criterion(log_probs, targets, input_lengths, target_lengths)
+            if not (torch.isnan(loss) or torch.isinf(loss)):
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+                optimizer.step()
 
-        if torch.isnan(loss) or torch.isinf(loss):
-            print(f"  [Warning] Skipping batch {batch_idx}: CTC Loss is NaN/Inf")
-            continue
-
-        loss.backward()
-        
-        # Gradient clipping to prevent gradient explosion in RNNs
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-
-        optimizer.step()
-
-        batch_size = images.size(0)
-        running_loss += loss.item() * batch_size
-        total_samples += batch_size
+        if not (torch.isnan(loss) or torch.isinf(loss)):
+            batch_size = images.size(0)
+            running_loss += loss.item() * batch_size
+            total_samples += batch_size
 
     avg_loss = running_loss / max(1, total_samples)
     return avg_loss
@@ -95,7 +101,12 @@ def evaluate_epoch(
         images = batch['images'].to(device)
         target_texts = batch['target_texts']
 
-        logits = model(images)  # (B, W_seq, Vocab_Size)
+        if device.type == 'cuda':
+            with torch.cuda.amp.autocast():
+                logits = model(images)
+        else:
+            logits = model(images)
+
         preds = model.decode_greedy(logits, tokenizer)
 
         all_preds.extend(preds)
@@ -109,22 +120,23 @@ def evaluate_epoch(
 def train_fold(
     fold: int = 0,
     epochs: int = 25,
-    batch_size: int = 32,
+    batch_size: int = 16,
     learning_rate: float = 1e-3,
-    device_str: Optional[str] = None
+    device_str: Optional[str] = None,
+    use_amp: bool = True
 ) -> Dict[str, Any]:
     """
     Trains CRNN model on specified fold and saves best checkpoint.
     """
-    print(f"\n==================================================================")
-    print(f" STARTING TRAINING ON FOLD {fold} ({epochs} Epochs, Batch Size: {batch_size})")
-    print(f"==================================================================")
-
     if device_str is None:
         device_str = "cuda" if torch.cuda.is_available() else "cpu"
 
     device = torch.device(device_str)
-    print(f"Execution Device: {device}")
+
+    print(f"\n==================================================================")
+    print(f" STARTING TRAINING ON FOLD {fold} ({epochs} Epochs, Batch Size: {batch_size})")
+    print(f" Execution Device: {device} | Mixed Precision (AMP): {use_amp and device.type == 'cuda'}")
+    print(f"==================================================================")
 
     train_folds_path = os.path.join(PROJECT_ROOT, 'Train_Folds.csv')
     if not os.path.exists(train_folds_path):
@@ -148,16 +160,32 @@ def train_fold(
 
     collate_fn = OCRCollateFn(downsample_factor=4, pad_value=0.0)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn, num_workers=0)
+    num_workers = 4 if device.type == 'cuda' else 0
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=num_workers,
+        pin_memory=(device.type == 'cuda')
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=num_workers,
+        pin_memory=(device.type == 'cuda')
+    )
 
     # Initialize CRNN Model
     model = CRNN_OCR(vocab_size=vocab_size, hidden_size=256, pretrained_backbone=True).to(device)
 
-    # Criterion, Optimizer, Scheduler
+    # Criterion, Optimizer, Scheduler, Scaler
     criterion = nn.CTCLoss(blank=tokenizer.blank_idx, zero_infinity=True).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
+    scaler = torch.cuda.amp.GradScaler() if (use_amp and device.type == 'cuda') else None
 
     models_dir = os.path.join(PROJECT_ROOT, 'models')
     os.makedirs(models_dir, exist_ok=True)
@@ -171,7 +199,7 @@ def train_fold(
     for epoch in range(1, epochs + 1):
         epoch_start = time.time()
         
-        train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
+        train_loss = train_epoch(model, train_loader, optimizer, criterion, scaler, device)
         scheduler.step()
 
         # Evaluate on Validation Fold
@@ -216,5 +244,4 @@ def train_fold(
     }
 
 if __name__ == '__main__':
-    # Train Fold 0 baseline (fast run for baseline verification)
-    train_fold(fold=0, epochs=3, batch_size=16, learning_rate=1e-3)
+    train_fold(fold=0, epochs=25, batch_size=16)
