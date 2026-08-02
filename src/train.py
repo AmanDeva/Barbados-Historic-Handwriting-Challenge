@@ -54,7 +54,7 @@ def train_epoch(
         optimizer.zero_grad()
 
         if scaler is not None and device.type == 'cuda':
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 logits = model(images)  # (B, W_seq, Vocab_Size)
                 log_probs = F.log_softmax(logits, dim=2).permute(1, 0, 2)
                 loss = criterion(log_probs, targets, input_lengths, target_lengths)
@@ -102,7 +102,7 @@ def evaluate_epoch(
         target_texts = batch['target_texts']
 
         if device.type == 'cuda':
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 logits = model(images)
         else:
             logits = model(images)
@@ -185,7 +185,7 @@ def train_fold(
     criterion = nn.CTCLoss(blank=tokenizer.blank_idx, zero_infinity=True).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
-    scaler = torch.cuda.amp.GradScaler() if (use_amp and device.type == 'cuda') else None
+    scaler = torch.amp.GradScaler('cuda') if (use_amp and device.type == 'cuda') else None
 
     models_dir = os.path.join(PROJECT_ROOT, 'models')
     os.makedirs(models_dir, exist_ok=True)
