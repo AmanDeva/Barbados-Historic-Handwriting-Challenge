@@ -108,10 +108,10 @@ def evaluate_epoch(
 
 def train_fold(
     fold: int = 0,
-    epochs: int = 15,
-    batch_size: int = 16,
+    epochs: int = 25,
+    batch_size: int = 32,
     learning_rate: float = 1e-3,
-    device_str: str = "cpu"
+    device_str: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Trains CRNN model on specified fold and saves best checkpoint.
@@ -119,6 +119,9 @@ def train_fold(
     print(f"\n==================================================================")
     print(f" STARTING TRAINING ON FOLD {fold} ({epochs} Epochs, Batch Size: {batch_size})")
     print(f"==================================================================")
+
+    if device_str is None:
+        device_str = "cuda" if torch.cuda.is_available() else "cpu"
 
     device = torch.device(device_str)
     print(f"Execution Device: {device}")
