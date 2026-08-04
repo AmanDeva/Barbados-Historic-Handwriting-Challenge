@@ -36,7 +36,7 @@ from peft import (
 )
 
 SCRIPT_DIR = os.path.dirname(__file__)
-REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 print("Repo root resolved to:", REPO_ROOT)
 # -----------------------------
 # Utils
