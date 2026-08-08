@@ -5,6 +5,9 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 
+# Disable OpenCV internal multithreading to prevent thread pool segfaults
+cv2.setNumThreads(1)
+
 # Ensure project root is in sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
@@ -21,7 +24,6 @@ def process_single_image(img_id, src_dir, dst_dir, enhancer):
         return img_id, False, "Source file not found"
 
     try:
-        # Load and enhance image using ImageEnhancer
         enhanced_rgb = enhancer.process_file(src_path)
         enhanced_bgr = cv2.cvtColor(enhanced_rgb, cv2.COLOR_RGB2BGR)
         cv2.imwrite(dst_path, enhanced_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
@@ -53,8 +55,8 @@ def main():
     fail_count = 0
     errors = []
 
-    # Process using multithreading for fast IO and parallel CPU preprocessing
-    num_workers = min(16, os.cpu_count() or 4)
+    # Safe worker thread pool
+    num_workers = 4
     print(f"Starting parallel processing with {num_workers} worker threads...\n")
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
