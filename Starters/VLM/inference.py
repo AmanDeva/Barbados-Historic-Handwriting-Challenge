@@ -62,8 +62,12 @@ def to_bool(x, default=False):
 # -----------------------------
 
 OCR_PROMPT = (
-    "Transcribe EXACTLY as seen. Preserve line breaks, punctuation, and spacing. "
-    "Do not add explanations. Return verbatim transcription. No paraphrasing. No normalization."
+    "You are a verbatim historical document transcriber. "
+    "Transcribe the handwritten text from the image EXACTLY as written.\n"
+    "CRITICAL RULES:\n"
+    "1. Do NOT modernize or expand historical shorthand abbreviations (e.g., keep 'wch', 'sd', 'ye', 'Gent:', 'Esqr' exactly as written).\n"
+    "2. Do NOT alter original capitalization, punctuation, or spelling errors.\n"
+    "3. Output ONLY the raw transcribed text string with no commentary or extra formatting."
 )
 
 

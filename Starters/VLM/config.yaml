@@ -8,14 +8,14 @@ training:
   output_dir: "./qwen2-vl-ocr"
   per_device_train_batch_size: 4
   gradient_accumulation_steps: 4
-  num_train_epochs: 3
-  learning_rate: 0.00003
+  num_train_epochs: 8
+  learning_rate: 0.00005
   dataloader_num_workers: 4
   max_pixels: 1500000
   use_bf16: true
   debug: false
-  r: 16
-  lora_alpha: 32
+  r: 32
+  lora_alpha: 64
 
 inference:
   model_path: "./qwen2-vl-ocr/final"
@@ -25,7 +25,7 @@ inference:
   device: "auto"
   use_bf16: false
   max_new_tokens: 128
-  num_beams: 3
+  num_beams: 1
 
 evaluation:
   pred_csv: "submission_vlm.csv"
