@@ -1,12 +1,8 @@
 import os
 import sys
-import cv2
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
-
-# Disable OpenCV internal multithreading to prevent thread pool segfaults
-cv2.setNumThreads(1)
 
 # Ensure project root is in sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,16 +20,15 @@ def process_single_image(img_id, src_dir, dst_dir, enhancer):
         return img_id, False, "Source file not found"
 
     try:
-        enhanced_rgb = enhancer.process_file(src_path)
-        enhanced_bgr = cv2.cvtColor(enhanced_rgb, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(dst_path, enhanced_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        pil_img = enhancer.process_file_to_pil(src_path)
+        pil_img.save(dst_path, format="JPEG", quality=95)
         return img_id, True, "Success"
     except Exception as e:
         return img_id, False, str(e)
 
 def main():
     print("==================================================================")
-    print(" BATCH PRE-PROCESSING ALL 5,472 IMAGES (TRAIN + TEST) ")
+    print(" BATCH PRE-PROCESSING ALL 5,472 IMAGES (PURE PIL THREAD-SAFE) ")
     print("==================================================================")
 
     src_img_dir = os.path.join(PROJECT_ROOT, 'images')
@@ -49,14 +44,13 @@ def main():
     all_ids = sorted(list(set(train_df['ID'].tolist() + test_df['ID'].tolist())))
     print(f"Total unique images to process: {len(all_ids):,} (Train: {len(train_df):,}, Test: {len(test_df):,})")
 
-    enhancer = ImageEnhancer(target_height=128, clip_limit=2.0)
+    enhancer = ImageEnhancer(target_height=128)
 
     success_count = 0
     fail_count = 0
     errors = []
 
-    # Safe worker thread pool
-    num_workers = 4
+    num_workers = min(16, os.cpu_count() or 4)
     print(f"Starting parallel processing with {num_workers} worker threads...\n")
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
