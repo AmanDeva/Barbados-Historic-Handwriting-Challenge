@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.preprocessing import ImageEnhancer
+from src.preprocessing import HistoricalPaleographyEnhancer
 
 def process_single_image(img_id, src_dir, dst_dir, enhancer):
     src_path = os.path.join(src_dir, f"{img_id}.jpg")
@@ -28,7 +28,7 @@ def process_single_image(img_id, src_dir, dst_dir, enhancer):
 
 def main():
     print("==================================================================")
-    print(" BATCH PRE-PROCESSING ALL 5,472 IMAGES (PURE PIL THREAD-SAFE) ")
+    print(" BATCH PALEOGRAPHY PREPROCESSING (CIELAB + DESKEW + HEALING) ")
     print("==================================================================")
 
     src_img_dir = os.path.join(PROJECT_ROOT, 'images')
@@ -44,7 +44,7 @@ def main():
     all_ids = sorted(list(set(train_df['ID'].tolist() + test_df['ID'].tolist())))
     print(f"Total unique images to process: {len(all_ids):,} (Train: {len(train_df):,}, Test: {len(test_df):,})")
 
-    enhancer = ImageEnhancer(target_height=128)
+    enhancer = HistoricalPaleographyEnhancer(target_height=128, gamma_yellow_suppression=0.65, deskew=True, heal_strokes=True)
 
     success_count = 0
     fail_count = 0
@@ -72,7 +72,7 @@ def main():
             if completed % 500 == 0 or completed == len(all_ids):
                 print(f"Progress: {completed:,} / {len(all_ids):,} ({completed/len(all_ids)*100:.1f}%) processed...")
 
-    print("\n--- BATCH PROCESSING SUMMARY ---")
+    print("\n--- PALEOGRAPHY PROCESSING COMPLETE ---")
     print(f"[OK] Total Successfully Processed & Saved : {success_count:,}")
     print(f"[OK] Total Destination Images in Directory: {len(os.listdir(dst_img_dir)):,}")
     print(f"Failed Count                           : {fail_count}")
