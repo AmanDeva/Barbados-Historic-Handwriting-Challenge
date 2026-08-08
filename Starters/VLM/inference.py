@@ -162,9 +162,9 @@ def run_inference(
     # -----------------------------
     # ROOT (SINGLE SOURCE OF TRUTH)
     # -----------------------------
-    repo_root = cfg_general.get("repo_root")
-    if repo_root is None:
-        raise ValueError("❌ Missing general.repo_root in config.yaml")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    print(f"[INFO] repo_root={repo_root}")
 
     # -----------------------------
     # Resolve model path
@@ -172,19 +172,24 @@ def run_inference(
     model_path = model_path or cfg_inf.get("model_path")
     if model_path is None:
         raise ValueError("❌ Missing model_path (CLI or config.yaml)")
+    if not os.path.isabs(model_path):
+        model_path = os.path.join(script_dir, model_path)
 
     # -----------------------------
     # Resolve paths safely
     # -----------------------------
-    test_csv = test_csv or cfg_inf.get("test_csv", "test_split.csv")
-    base_image_dir = base_image_dir or cfg_inf.get("base_image_dir", "data")
-    output_csv = output_csv or cfg_inf.get("output_csv", "submission.csv")
+    test_csv = test_csv or cfg_inf.get("test_csv", "Test.csv")
+    base_image_dir = base_image_dir or cfg_inf.get("base_image_dir", "data/processed_images")
+    output_csv = output_csv or cfg_inf.get("output_csv", "submission_vlm.csv")
 
     if not os.path.isabs(test_csv):
         test_csv = os.path.join(repo_root, test_csv)
 
     if not os.path.isabs(base_image_dir):
         base_image_dir = os.path.join(repo_root, base_image_dir)
+
+    if not os.path.isabs(output_csv):
+        output_csv = os.path.join(repo_root, output_csv)
 
     # -----------------------------
     # Runtime params
