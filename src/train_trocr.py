@@ -140,8 +140,9 @@ def train_trocr(
     model = VisionEncoderDecoderModel.from_pretrained(MODEL_NAME)
     model.config.decoder.max_position_embeddings = MAX_LENGTH
     model.config.max_length = MAX_LENGTH
-    model.config.eos_token_id = processor.tokenizer.eos_token_id
+    model.config.decoder_start_token_id = processor.tokenizer.cls_token_id if processor.tokenizer.cls_token_id is not None else processor.tokenizer.bos_token_id
     model.config.pad_token_id = processor.tokenizer.pad_token_id
+    model.config.eos_token_id = processor.tokenizer.eos_token_id
     model.config.vocab_size = model.config.decoder.vocab_size
 
     # Freeze encoder early layers if desired, or fine-tune end-to-end
