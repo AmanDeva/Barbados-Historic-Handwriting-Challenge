@@ -287,11 +287,26 @@ def predict_trocr(
     test_dataset = BarbadosTrOCRDataset(test_df, full_img_dir, processor, is_train=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
+    from transformers import GenerationConfig
+    start_token_id = processor.tokenizer.cls_token_id if processor.tokenizer.cls_token_id is not None else processor.tokenizer.bos_token_id
+    gen_config = GenerationConfig(
+        max_length=MAX_LENGTH,
+        decoder_start_token_id=start_token_id,
+        pad_token_id=processor.tokenizer.pad_token_id,
+        eos_token_id=processor.tokenizer.eos_token_id,
+        vocab_size=model.config.decoder.vocab_size,
+        num_beams=4,
+        early_stopping=True,
+        no_repeat_ngram_size=3,
+        length_penalty=1.0,
+        do_sample=False
+    )
+
     all_preds = []
     with torch.no_grad():
-        for batch in tqdm(test_loader, desc="Predicting Test Set"):
+        for batch in tqdm(test_loader, desc="Predicting Test Set (4-Beam Search)"):
             pixel_values = batch["pixel_values"].to(device)
-            generated_ids = model.generate(pixel_values)
+            generated_ids = model.generate(pixel_values, generation_config=gen_config)
             preds = processor.batch_decode(generated_ids, skip_special_tokens=True)
             all_preds.extend(preds)
 
