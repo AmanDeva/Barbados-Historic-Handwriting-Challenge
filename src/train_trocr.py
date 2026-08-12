@@ -123,16 +123,16 @@ def train_trocr(
     device = torch.device(device_str)
     os.makedirs(output_dir, exist_ok=True)
 
-    # 1. Load Processor and Tokenizer with sequence length = 256
+    # 1. Load Image Processor and Tokenizer with sequence length = 256
     print("Loading TrOCR Processor & Tokenizer...")
+    from transformers import AutoImageProcessor, AutoTokenizer
+    image_processor = AutoImageProcessor.from_pretrained(MODEL_NAME)
     try:
-        processor = TrOCRProcessor.from_pretrained(MODEL_NAME, use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("roberta-base")
     except Exception:
-        from transformers import AutoImageProcessor, AutoTokenizer
-        feature_extractor = AutoImageProcessor.from_pretrained(MODEL_NAME)
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
-        processor = TrOCRProcessor(image_processor=feature_extractor, tokenizer=tokenizer)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
+    processor = TrOCRProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.tokenizer.model_max_length = MAX_LENGTH
 
     # 2. Load Model & Override Sequence Length
@@ -255,7 +255,14 @@ def predict_trocr(
     print("==================================================================")
 
     device = torch.device(device_str)
-    processor = TrOCRProcessor.from_pretrained(model_dir, use_fast=False)
+    try:
+        processor = TrOCRProcessor.from_pretrained(model_dir)
+    except Exception:
+        from transformers import AutoImageProcessor, AutoTokenizer
+        img_proc = AutoImageProcessor.from_pretrained(model_dir)
+        tok = AutoTokenizer.from_pretrained("roberta-base")
+        processor = TrOCRProcessor(image_processor=img_proc, tokenizer=tok)
+
     model = VisionEncoderDecoderModel.from_pretrained(model_dir).to(device)
     model.eval()
 
