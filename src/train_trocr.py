@@ -135,17 +135,30 @@ def train_trocr(
     processor = TrOCRProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.tokenizer.model_max_length = MAX_LENGTH
 
-    # 2. Load Model & Override Sequence Length
+    # 2. Load Model & Configure GenerationConfig (max_length=256)
     print("Loading VisionEncoderDecoderModel...")
+    from transformers import GenerationConfig
     model = VisionEncoderDecoderModel.from_pretrained(MODEL_NAME)
-    model.config.decoder.max_position_embeddings = MAX_LENGTH
-    model.config.max_length = MAX_LENGTH
-    model.config.decoder_start_token_id = processor.tokenizer.cls_token_id if processor.tokenizer.cls_token_id is not None else processor.tokenizer.bos_token_id
-    model.config.pad_token_id = processor.tokenizer.pad_token_id
-    model.config.eos_token_id = processor.tokenizer.eos_token_id
-    model.config.vocab_size = model.config.decoder.vocab_size
+    
+    start_token_id = processor.tokenizer.cls_token_id if processor.tokenizer.cls_token_id is not None else processor.tokenizer.bos_token_id
+    pad_token_id = processor.tokenizer.pad_token_id
+    eos_token_id = processor.tokenizer.eos_token_id
 
-    # Freeze encoder early layers if desired, or fine-tune end-to-end
+    gen_config = GenerationConfig(
+        max_length=MAX_LENGTH,
+        decoder_start_token_id=start_token_id,
+        pad_token_id=pad_token_id,
+        eos_token_id=eos_token_id,
+        vocab_size=model.config.decoder.vocab_size,
+        do_sample=False,
+        num_beams=1
+    )
+    model.generation_config = gen_config
+    model.config.decoder_start_token_id = start_token_id
+    model.config.pad_token_id = pad_token_id
+    model.config.eos_token_id = eos_token_id
+
+    # Move to GPU
     model.to(device)
 
     # 3. Load Clean Dataset and Create Stratified Train/Val Split (90/10)
@@ -224,7 +237,7 @@ def train_trocr(
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f"Epoch [{epoch:02d}/{epochs:02d}] Eval"):
                 pixel_values = batch["pixel_values"].to(device)
-                generated_ids = model.generate(pixel_values, max_length=MAX_LENGTH)
+                generated_ids = model.generate(pixel_values)
                 decoded_preds = processor.batch_decode(generated_ids, skip_special_tokens=True)
                 val_preds.extend(decoded_preds)
                 val_targets.extend(batch["target_text"])
@@ -278,7 +291,7 @@ def predict_trocr(
     with torch.no_grad():
         for batch in tqdm(test_loader, desc="Predicting Test Set"):
             pixel_values = batch["pixel_values"].to(device)
-            generated_ids = model.generate(pixel_values, max_length=MAX_LENGTH)
+            generated_ids = model.generate(pixel_values)
             preds = processor.batch_decode(generated_ids, skip_special_tokens=True)
             all_preds.extend(preds)
 
