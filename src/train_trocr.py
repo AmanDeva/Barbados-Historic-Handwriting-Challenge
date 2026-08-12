@@ -125,7 +125,14 @@ def train_trocr(
 
     # 1. Load Processor and Tokenizer with sequence length = 256
     print("Loading TrOCR Processor & Tokenizer...")
-    processor = TrOCRProcessor.from_pretrained(MODEL_NAME)
+    try:
+        processor = TrOCRProcessor.from_pretrained(MODEL_NAME, use_fast=False)
+    except Exception:
+        from transformers import AutoImageProcessor, AutoTokenizer
+        feature_extractor = AutoImageProcessor.from_pretrained(MODEL_NAME)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
+        processor = TrOCRProcessor(image_processor=feature_extractor, tokenizer=tokenizer)
+
     processor.tokenizer.model_max_length = MAX_LENGTH
 
     # 2. Load Model & Override Sequence Length
@@ -248,7 +255,7 @@ def predict_trocr(
     print("==================================================================")
 
     device = torch.device(device_str)
-    processor = TrOCRProcessor.from_pretrained(model_dir)
+    processor = TrOCRProcessor.from_pretrained(model_dir, use_fast=False)
     model = VisionEncoderDecoderModel.from_pretrained(model_dir).to(device)
     model.eval()
 
