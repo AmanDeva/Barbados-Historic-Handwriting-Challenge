@@ -295,10 +295,7 @@ def predict_trocr(
         pad_token_id=processor.tokenizer.pad_token_id,
         eos_token_id=processor.tokenizer.eos_token_id,
         vocab_size=model.config.decoder.vocab_size,
-        num_beams=4,
-        early_stopping=True,
-        no_repeat_ngram_size=3,
-        length_penalty=1.0,
+        num_beams=1,
         do_sample=False
     )
 

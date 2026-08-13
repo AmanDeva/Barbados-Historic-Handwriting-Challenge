@@ -56,8 +56,7 @@ def train_single_fold(fold: int, epochs: int = 12, batch_size: int = 4, grad_acc
         pad_token_id=pad_token_id,
         eos_token_id=eos_token_id,
         vocab_size=model.config.decoder.vocab_size,
-        num_beams=4,
-        early_stopping=True,
+        num_beams=1,
         do_sample=False
     )
     model.generation_config = gen_config
@@ -176,8 +175,7 @@ def predict_5fold_ensemble(output_csv: str = "submission_trocr_5fold.csv", batch
             pad_token_id=processor.tokenizer.pad_token_id,
             eos_token_id=processor.tokenizer.eos_token_id,
             vocab_size=model.config.decoder.vocab_size,
-            num_beams=4,
-            early_stopping=True,
+            num_beams=1,
             do_sample=False
         )
 
