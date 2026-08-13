@@ -65,7 +65,9 @@ def train_single_fold(fold: int, epochs: int = 12, batch_size: int = 4, grad_acc
     model.config.eos_token_id = eos_token_id
     model.to(device)
 
-    folds_csv = os.path.join(PROJECT_ROOT, "data", "folds.csv")
+    folds_csv = os.path.join(PROJECT_ROOT, "Train_Folds.csv")
+    if not os.path.exists(folds_csv):
+        folds_csv = os.path.join(PROJECT_ROOT, "data", "folds.csv")
     df = pd.read_csv(folds_csv)
 
     train_df = df[df["fold"] != fold].reset_index(drop=True)
