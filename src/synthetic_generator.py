@@ -249,11 +249,11 @@ def generate_synthetic_dataset(num_samples: int = 50000, num_workers: int = None
     if not font_files:
         raise RuntimeError("No valid TTF fonts found in data/fonts!")
 
-    print(f"✓ Loaded {len(font_files)} Historical Cursive Fonts")
+    print(f"[OK] Loaded {len(font_files)} Historical Cursive Fonts")
 
     print("Building historical 18th-century legal corpus...")
     corpus = build_historical_corpus()
-    print(f"✓ Built base corpus with {len(corpus):,} unique phrases")
+    print(f"[OK] Built base corpus with {len(corpus):,} unique phrases")
 
     # Sample texts for generation
     selected_texts = [random.choice(corpus) for _ in range(num_samples)]

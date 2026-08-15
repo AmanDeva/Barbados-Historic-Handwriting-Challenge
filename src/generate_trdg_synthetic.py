@@ -88,7 +88,7 @@ def build_archaic_corpus():
             t = str(text).strip()
             if len(t) > 3:
                 corpus.append(t)
-        print(f"  ✓ Extracted {len(df):,} lines from Train_Cleaned.csv")
+        print(f"  [OK] Extracted {len(df):,} lines from Train_Cleaned.csv")
 
     # 2. Procedural 18th-century formula generation with shorthand contractions
     for template in LEGAL_FORMULAS:
