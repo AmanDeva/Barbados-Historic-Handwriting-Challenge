@@ -40,8 +40,8 @@ def pretrain_on_synthetic_data(
     synth_img_dir: str = "data/synthetic_images",
     output_dir: str = PRETRAINED_DIR,
     epochs: int = 3,
-    batch_size: int = 4,
-    grad_accum_steps: int = 8,
+    batch_size: int = 8,
+    grad_accum_steps: int = 4,
     lr: float = 5e-5
 ):
     print("==================================================================")
@@ -134,12 +134,12 @@ def pretrain_on_synthetic_data(
 
 def finetune_on_competition_data(
     pretrained_model_dir: str = PRETRAINED_DIR,
-    train_csv: str = "Train_Cleaned.csv",
+    train_csv: str = "Train_UltraCleaned.csv",
     img_dir: str = "data/processed_images",
     output_dir: str = FINE_TUNED_DIR,
     epochs: int = 12,
-    batch_size: int = 4,
-    grad_accum_steps: int = 8,
+    batch_size: int = 8,
+    grad_accum_steps: int = 4,
     lr: float = 2e-5
 ):
     print("==================================================================")
