@@ -14,6 +14,8 @@ venv/
 # Preprocessed & raw images (regenerated automatically via scratch/batch_process_all_images.py in <15s)
 images/
 data/processed_images/
+data/synthetic_images/
+data/backgrounds/
 
 # Local model weights & large scratch archives
 models/
