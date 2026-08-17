@@ -120,29 +120,51 @@ def build_barbados_corpus():
 def setup_fonts():
     print("Setting Up Ingredient 2: Historical Cursive Fonts...")
     os.makedirs(FONTS_DIR, exist_ok=True)
+
+    # 1. Check if fonts already exist in data/fonts/
+    existing_fonts = [os.path.join(FONTS_DIR, f) for f in os.listdir(FONTS_DIR) if f.endswith('.ttf') and os.path.getsize(os.path.join(FONTS_DIR, f)) > 1000]
+    if existing_fonts:
+        print(f"  [OK] Loaded {len(existing_fonts)} Local Historical Cursive Fonts from: {FONTS_DIR}\n")
+        return existing_fonts
+
+    # 2. Download missing fonts with custom User-Agent
     HISTORICAL_FONTS = {
-        "PinyonScript-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/pinyonscript/PinyonScript-Regular.ttf",
-        "Tangerine-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/tangerine/Tangerine-Regular.ttf",
-        "Tangerine-Bold.ttf": "https://github.com/google/fonts/raw/main/ofl/tangerine/Tangerine-Bold.ttf",
-        "GreatVibes-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/greatvibes/GreatVibes-Regular.ttf",
-        "AlexBrush-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/alexbrush/AlexBrush-Regular.ttf",
-        "Allura-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/allura/Allura-Regular.ttf",
-        "MonsieurLaDoulaise-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/monsieurladoulaise/MonsieurLaDoulaise-Regular.ttf",
-        "Meddon.ttf": "https://github.com/google/fonts/raw/main/ofl/meddon/Meddon.ttf",
-        "HomemadeApple-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/homemadeapple/HomemadeApple-Regular.ttf",
-        "MarckScript-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/marckscript/MarckScript-Regular.ttf",
-        "Satisfy-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/satisfy/Satisfy-Regular.ttf",
+        "PinyonScript-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/pinyonscript/PinyonScript-Regular.ttf",
+        "Tangerine-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/tangerine/Tangerine-Regular.ttf",
+        "Tangerine-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/tangerine/Tangerine-Bold.ttf",
+        "GreatVibes-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/greatvibes/GreatVibes-Regular.ttf",
+        "AlexBrush-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/alexbrush/AlexBrush-Regular.ttf",
+        "Allura-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/allura/Allura-Regular.ttf",
+        "MonsieurLaDoulaise-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/monsieurladoulaise/MonsieurLaDoulaise-Regular.ttf",
+        "Meddon.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/meddon/Meddon.ttf",
+        "HomemadeApple-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/homemadeapple/HomemadeApple-Regular.ttf",
+        "MarckScript-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/marckscript/MarckScript-Regular.ttf",
+        "Satisfy-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/satisfy/Satisfy-Regular.ttf",
     }
+
     valid_fonts = []
     for font_name, url in HISTORICAL_FONTS.items():
         dst_path = os.path.join(FONTS_DIR, font_name)
         if not os.path.exists(dst_path) or os.path.getsize(dst_path) < 1000:
             try:
-                urllib.request.urlretrieve(url, dst_path)
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=10) as response, open(dst_path, 'wb') as out_file:
+                    out_file.write(response.read())
             except Exception:
                 pass
         if os.path.exists(dst_path) and os.path.getsize(dst_path) > 1000:
             valid_fonts.append(dst_path)
+
+    # 3. Fallback: Search common Linux / Windows system fonts if download was blocked
+    if not valid_fonts:
+        system_font_dirs = ["/usr/share/fonts", "/usr/local/share/fonts", "C:\\Windows\\Fonts"]
+        for sdir in system_font_dirs:
+            if os.path.exists(sdir):
+                for root, _, files in os.walk(sdir):
+                    for file in files:
+                        if file.endswith('.ttf'):
+                            valid_fonts.append(os.path.join(root, file))
+
     print(f"  [OK] Ready with {len(valid_fonts)} Historical Cursive Fonts\n")
     return valid_fonts
 
