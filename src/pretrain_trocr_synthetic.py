@@ -115,12 +115,16 @@ def pretrain_on_synthetic_data(
                 if scaler:
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    scale_before = scaler.get_scale()
                     scaler.step(optimizer)
                     scaler.update()
+                    scale_after = scaler.get_scale()
+                    if scale_before <= scale_after:
+                        scheduler.step()
                 else:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     optimizer.step()
-                scheduler.step()
+                    scheduler.step()
                 optimizer.zero_grad()
 
             pbar.set_postfix({"loss": f"{running_loss / step_in_epoch:.4f}"})
@@ -203,12 +207,16 @@ def finetune_on_competition_data(
                 if scaler:
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    scale_before = scaler.get_scale()
                     scaler.step(optimizer)
                     scaler.update()
+                    scale_after = scaler.get_scale()
+                    if scale_before <= scale_after:
+                        scheduler.step()
                 else:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     optimizer.step()
-                scheduler.step()
+                    scheduler.step()
                 optimizer.zero_grad()
 
             pbar.set_postfix({"loss": f"{running_loss / step_in_epoch:.4f}"})
