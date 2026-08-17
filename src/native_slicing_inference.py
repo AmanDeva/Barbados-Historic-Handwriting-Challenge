@@ -29,7 +29,13 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "trocr_large_best")
+POSSIBLE_MODEL_DIRS = [
+    os.path.join(PROJECT_ROOT, "models", "trocr_large_grandmaster_best"),
+    os.path.join(PROJECT_ROOT, "models", "trocr_large_best"),
+    os.path.join(PROJECT_ROOT, "models", "trocr_large_synthetic_pretrained"),
+]
+
+MODEL_DIR = next((d for d in POSSIBLE_MODEL_DIRS if os.path.exists(d)), os.path.join(PROJECT_ROOT, "models", "trocr_large_grandmaster_best"))
 TEST_CSV = os.path.join(PROJECT_ROOT, "Test.csv")
 IMG_DIR = os.path.join(PROJECT_ROOT, "data", "processed_images")
 OUTPUT_CSV = os.path.join(PROJECT_ROOT, "submission_native_sliced.csv")
