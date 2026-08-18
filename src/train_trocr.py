@@ -259,11 +259,18 @@ def train_trocr(
 def predict_trocr(
     test_csv: str = "Test.csv",
     img_dir: str = "data/processed_images",
-    model_dir: str = "models/trocr_large_best",
-    output_csv: str = "submission_trocr.csv",
+    model_dir: str = None,
+    output_csv: str = "submission_trocr_grandmaster.csv",
     batch_size: int = 8,
     device_str: str = "cuda" if torch.cuda.is_available() else "cpu"
 ):
+    if model_dir is None:
+        if os.path.exists(os.path.join(PROJECT_ROOT, "models", "trocr_large_grandmaster_best")):
+            model_dir = os.path.join(PROJECT_ROOT, "models", "trocr_large_grandmaster_best")
+        elif os.path.exists(os.path.join(PROJECT_ROOT, "models", "trocr_large_best")):
+            model_dir = os.path.join(PROJECT_ROOT, "models", "trocr_large_best")
+        else:
+            model_dir = os.path.join(PROJECT_ROOT, "models", "trocr_large_synthetic_pretrained")
     print("==================================================================")
     print(" RUNNING INFERENCE WITH TrOCR-LARGE HANDWRITTEN ")
     print("==================================================================")
