@@ -1,7 +1,7 @@
 """
 5-Fold Stratified Cross-Validation & MBR Consensus Engine for TrOCR-Large
 Trains 5 independent Vision Transformer models across all 5 folds and decodes
-with 4-Beam Search + Minimum Bayes Risk (MBR) Consensus.
+with Greedy Decoding + Minimum Bayes Risk (MBR) Consensus.
 """
 
 import os
@@ -29,9 +29,10 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from src.train_trocr import BarbadosTrOCRDataset, compute_metrics, MODEL_NAME, MAX_LENGTH
+from src.mbr_consensus import minimum_bayes_risk_consensus
 
 
-def train_single_fold(fold: int, epochs: int = 12, batch_size: int = 4, grad_accum_steps: int = 8, lr: float = 3e-5):
+def train_single_fold(fold: int, epochs: int = 15, batch_size: int = 8, grad_accum_steps: int = 4, lr: float = 4e-5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     output_dir = os.path.join(PROJECT_ROOT, "models", f"trocr_large_fold{fold}")
     os.makedirs(output_dir, exist_ok=True)
@@ -111,9 +112,12 @@ def train_single_fold(fold: int, epochs: int = 12, batch_size: int = 4, grad_acc
             if step_in_epoch % grad_accum_steps == 0:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scale_before = scaler.get_scale()
                 scaler.step(optimizer)
                 scaler.update()
-                scheduler.step()
+                scale_after = scaler.get_scale()
+                if scale_before <= scale_after:
+                    scheduler.step()
                 optimizer.zero_grad()
 
             pbar.set_postfix({"loss": f"{running_loss / step_in_epoch:.4f}"})
@@ -142,91 +146,78 @@ def train_single_fold(fold: int, epochs: int = 12, batch_size: int = 4, grad_acc
             processor.save_pretrained(output_dir)
 
 
-def train_all_folds(epochs: int = 12):
+def train_all_folds(epochs: int = 15):
     for f in range(5):
         train_single_fold(fold=f, epochs=epochs)
     print("\n[OK] ALL 5 FOLDS OF TrOCR-LARGE TRAINED SUCCESSFULLY!")
 
 
-def predict_5fold_ensemble(output_csv: str = "submission_trocr_5fold.csv", batch_size: int = 8):
+def predict_single_fold(fold: int, test_csv: str = "Test.csv", batch_size: int = 8) -> str:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    test_csv = os.path.join(PROJECT_ROOT, "Test.csv")
-    test_df = pd.read_csv(test_csv)
+    model_dir = os.path.join(PROJECT_ROOT, "models", f"trocr_large_fold{fold}")
+    output_csv = os.path.join(PROJECT_ROOT, f"submission_trocr_fold{fold}.csv")
+
+    print(f"\n---> Running Inference for Fold {fold} from: {model_dir}")
+    processor = TrOCRProcessor.from_pretrained(model_dir)
+    model = VisionEncoderDecoderModel.from_pretrained(model_dir).to(device)
+    model.eval()
+
+    full_test_csv = os.path.join(PROJECT_ROOT, test_csv)
+    test_df = pd.read_csv(full_test_csv)
     img_dir = os.path.join(PROJECT_ROOT, "data", "processed_images")
 
-    all_fold_preds = []
+    test_dataset = BarbadosTrOCRDataset(test_df, img_dir, processor, is_train=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
-    for fold in range(5):
-        model_dir = os.path.join(PROJECT_ROOT, "models", f"trocr_large_fold{fold}")
-        if not os.path.exists(model_dir):
-            print(f"Skipping fold {fold} (directory not found: {model_dir})")
-            continue
+    start_token_id = processor.tokenizer.cls_token_id if processor.tokenizer.cls_token_id is not None else processor.tokenizer.bos_token_id
+    gen_config = GenerationConfig(
+        max_length=MAX_LENGTH,
+        decoder_start_token_id=start_token_id,
+        pad_token_id=processor.tokenizer.pad_token_id,
+        eos_token_id=processor.tokenizer.eos_token_id,
+        vocab_size=model.config.decoder.vocab_size,
+        num_beams=1,
+        do_sample=False
+    )
 
-        print(f"\nPredicting with Fold {fold} model...")
-        image_processor = AutoImageProcessor.from_pretrained(model_dir)
-        tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        processor = TrOCRProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.tokenizer.model_max_length = MAX_LENGTH
-
-        model = VisionEncoderDecoderModel.from_pretrained(model_dir).to(device)
-        model.eval()
-
-        gen_config = GenerationConfig(
-            max_length=MAX_LENGTH,
-            decoder_start_token_id=processor.tokenizer.cls_token_id or processor.tokenizer.bos_token_id,
-            pad_token_id=processor.tokenizer.pad_token_id,
-            eos_token_id=processor.tokenizer.eos_token_id,
-            vocab_size=model.config.decoder.vocab_size,
-            num_beams=1,
-            do_sample=False
-        )
-
-        test_dataset = BarbadosTrOCRDataset(test_df, img_dir, processor, is_train=False)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-
-        fold_preds = []
-        with torch.no_grad():
-            for batch in tqdm(test_loader, desc=f"Predicting Fold {fold} (4-Beam Search)"):
-                pixel_values = batch["pixel_values"].to(device)
-                generated_ids = model.generate(pixel_values, generation_config=gen_config)
-                preds = processor.batch_decode(generated_ids, skip_special_tokens=True)
-                fold_preds.extend([str(p).strip() for p in preds])
-
-        all_fold_preds.append(fold_preds)
-
-    if not all_fold_preds:
-        raise ValueError("No fold models found to generate predictions!")
-
-    print("\nComputing Minimum Bayes Risk (MBR) Consensus across all fold predictions...")
-    num_samples = len(test_df)
-    consensus_predictions = []
-
-    for idx in range(num_samples):
-        candidates = [all_fold_preds[f][idx] for f in range(len(all_fold_preds))]
-        best_candidate = candidates[0]
-        min_risk = float('inf')
-
-        for i, y_i in enumerate(candidates):
-            total_dist = sum(editdistance.eval(y_i, y_j) for j, y_j in enumerate(candidates) if i != j)
-            if total_dist < min_risk:
-                min_risk = total_dist
-                best_candidate = y_i
-
-        consensus_predictions.append(best_candidate)
+    all_preds = []
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc=f"Predicting Fold {fold}"):
+            pixel_values = batch["pixel_values"].to(device)
+            gen_ids = model.generate(pixel_values, generation_config=gen_config)
+            preds = processor.batch_decode(gen_ids, skip_special_tokens=True)
+            all_preds.extend(preds)
 
     sub_df = pd.DataFrame({
         "ID": test_df["ID"],
-        "Target": consensus_predictions
+        "Target": all_preds
     })
+    sub_df.to_csv(output_csv, index=False)
+    print(f"[OK] Saved Fold {fold} predictions to: {output_csv}")
+    return output_csv
 
-    full_output_csv = os.path.join(PROJECT_ROOT, output_csv)
-    sub_df.to_csv(full_output_csv, index=False)
-    print(f"\n[OK] 5-Fold TrOCR MBR Consensus Submission saved to: {full_output_csv}")
+
+def predict_and_ensemble_all_folds(output_csv: str = "submission_trocr_5folds_mbr.csv"):
+    fold_csvs = []
+    for f in range(5):
+        fold_csv = predict_single_fold(fold=f)
+        fold_csvs.append(fold_csv)
+
+    print("\nFusing all 5 TrOCR Folds via Minimum Bayes Risk (MBR) Consensus...")
+    final_out = minimum_bayes_risk_consensus(fold_csvs, output_csv=output_csv)
+    print(f"\n[OK] 5-Fold MBR Grandmaster Submission Saved to: {final_out}")
+    return final_out
 
 
 if __name__ == '__main__':
     mode = sys.argv[1] if len(sys.argv) > 1 else "train"
     if mode == "train":
-        train_all_folds(epochs=12)
+        train_all_folds(epochs=15)
+    elif mode == "train_fold":
+        f = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+        train_single_fold(fold=f, epochs=15)
     elif mode == "predict":
-        predict_5fold_ensemble()
+        predict_and_ensemble_all_folds()
+    elif mode == "predict_fold":
+        f = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+        predict_single_fold(fold=f)
