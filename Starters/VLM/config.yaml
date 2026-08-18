@@ -2,12 +2,12 @@ general:
   repo_root: "."  # Root of Barbados-Historic-Handwriting-Challenge
 
 training:
-  model_id: "Qwen/Qwen2-VL-2B-Instruct"
-  train_csv: "Train_Cleaned.csv"
+  model_id: "Qwen/Qwen2-VL-7B-Instruct"
+  train_csv: "Train_UltraCleaned.csv"
   base_image_dir: "data/processed_images"
   output_dir: "./qwen2-vl-ocr"
-  per_device_train_batch_size: 4
-  gradient_accumulation_steps: 4
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
   num_train_epochs: 8
   learning_rate: 0.00005
   dataloader_num_workers: 4
@@ -21,7 +21,7 @@ inference:
   model_path: "./qwen2-vl-ocr/final"
   test_csv: "Test.csv"
   base_image_dir: "data/processed_images"
-  output_csv: "submission_vlm.csv"
+  output_csv: "submission_vlm_7b.csv"
   device: "auto"
   use_bf16: false
   max_new_tokens: 128
