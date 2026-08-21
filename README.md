@@ -1,10 +1,24 @@
-# R.O.A.D. Barbados Historic Handwriting Challenge
+# R.O.A.D. Barbados Historic Handwriting OCR Challenge
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![All-Time Best](https://img.shields.io/badge/Zindi%20Score-0.869784-brightgreen.svg)](https://zindi.africa/)
 
-This repository contains the complete, production-grade Optical Character Recognition (OCR) pipeline for the **R.O.A.D. Barbados Historic Handwriting Challenge**. The objective is to transcribe historical 18th–19th century Barbados archival record line images into digital text.
+This repository contains the complete, production-grade Optical Character Recognition (OCR) pipeline for the **R.O.A.D. Barbados Historic Handwriting Challenge** (Zindi). The goal is to accurately transcribe 17th–19th century archival Barbados deed and notary register records into digital text.
+
+---
+
+## 🏆 Current Benchmark: `0.869784` (Submission 12)
+- **WER Weighted**: `2.195916`
+- **CER Weighted**: `4.259106`
+- **Architecture**: 5-Fold Stratified TrOCR-Large (`microsoft/trocr-large-handwritten`) + Minimum Bayes Risk (MBR) Consensus Decoding.
+
+---
+
+## 📖 Essential Documentation
+- **[`Context.md`](Context.md)**: Master technical context, paleographic domain insights, metric definitions, and complete empirical submission scorecard (Submissions 1 to 12).
+- **[`AGENTS.md`](AGENTS.md)**: AI Agent and developer architecture guide with operational rules and key invariants.
 
 ---
 
@@ -13,63 +27,70 @@ This repository contains the complete, production-grade Optical Character Recogn
 ```text
 Barbados-Historic-Handwriting-Challenge/
 ├── data/
-│   ├── processed_images/     # All 5,472 CLAHE-enhanced, H=128px line images
-│   ├── train_folds.csv       # Stratified 5-Fold dataset with length quantile bins
-│   ├── processed_train.csv   # Normalized train labels
-│   └── processed_test.csv    # Test set metadata
+│   ├── processed_images/          # All 5,472 CIELAB-enhanced, deskewed images
+│   ├── archaic_corpus.txt         # 22,648 authentic Barbados legal phrases
+│   └── fonts/                     # 10 Historical Cursive TTF fonts
 ├── src/
-│   ├── preprocessing.py      # Label normalizer & CLAHE image enhancer
-│   ├── create_stratified_folds.py # 5-Fold length quantile split engine
-│   ├── dataset.py            # PyTorch Dataset, Tokenizer & Dynamic Collate
-│   ├── model.py              # CRNN (ResNet-18 4x downsampling + 2x BiLSTM + CTC)
-│   ├── metrics.py            # Official Zindi Metric (0.5 CER + 0.5 WER)
-│   ├── train.py              # Training loop with CosineAnnealingLR & Checkpoint
-│   └── inference.py          # Test set prediction & submission.csv generator
-├── CRNN.ipynb                # End-to-End SageMaker GPU Training Notebook
-├── Train_Cleaned.csv         # Cleaned ground-truth training targets
-├── Train_Folds.csv           # Primary 5-fold cross-validation CSV
-├── Test.csv                  # Test image IDs (1,374 rows)
-├── SampleSubmission.csv      # Submission format specification
-├── Context.md                # Project documentation
-└── README.md                 # Project guide
+│   ├── train_trocr_folds.py       # 5-Fold Stratified TrOCR-Large Trainer & MBR Consensus (Sub 12: 0.869784)
+│   ├── train_trocr.py             # Single TrOCR-Large Trainer with max_length=256
+│   ├── mbr_consensus.py           # Multi-Architecture Minimum Bayes Risk Decoder
+│   ├── train_byt5_refiner.py      # Token-free byte-level post-OCR refiner
+│   ├── clean_hard_mislabeled_samples.py # Active learning noise trimmer
+│   ├── preprocessing.py           # 4-Pillar Paleography preprocessor
+│   ├── dataset.py                 # PyTorch Dataset, Tokenizer & Dynamic Collate
+│   ├── model.py                   # CRNN Baseline (ResNet34 + BiLSTM + CTC)
+│   └── metrics.py                 # Official Zindi Metric calculation engine
+├── Starters/
+│   └── VLM/                       # Qwen2-VL LoRA training and inference
+├── Train_Cleaned.csv              # 4,077 clean training lines
+├── Train_UltraCleaned.csv         # 4,076 noise-trimmed training lines
+├── Train_Folds.csv                # Primary 5-fold stratified cross-validation CSV
+├── Test.csv                       # 1,374 test image IDs
+├── SampleSubmission.csv           # Submission template
+├── Context.md                     # Comprehensive technical context document
+├── AGENTS.md                      # AI Agent guide
+└── README.md                      # This project overview
 ```
 
 ---
 
-## ⚡ Quick Start on AWS SageMaker (`ml.g4dn.2xlarge`)
+## ⚡ Quick Start Guide (Vast.ai / SageMaker GPU)
 
-### 1. Clone Repository in SageMaker JupyterLab:
+### 1. Setup & Preprocessing (~30 seconds):
 ```bash
+# Clone & install dependencies
 git clone https://github.com/AmanDeva/Barbados-Historic-Handwriting-Challenge.git
 cd Barbados-Historic-Handwriting-Challenge
+pip install -q pandas scipy tqdm opencv-python-headless transformers sentencepiece protobuf tiktoken editdistance peft bitsandbytes accelerate
+
+# Download images & run 4-Pillar Paleography Preprocessing
+wget -O images.zip https://storage.googleapis.com/road-handwriting/images.zip && \
+unzip -q images.zip -d images/ && \
+mv images/*/*.jpg images/ 2>/dev/null || true && \
+python scratch/batch_process_all_images.py
 ```
 
-### 2. Run End-to-End Training Notebook:
-- Open **`CRNN.ipynb`** in SageMaker JupyterLab.
-- Select **PyTorch 2.0 (Python 3.10 / CUDA 11.8)** kernel.
-- Run all cells to train the model on GPU and automatically generate `submission.csv`.
+### 2. Train 5-Fold TrOCR-Large Ensemble:
+```bash
+python src/train_trocr_folds.py train
+```
 
----
+### 3. Generate 5-Fold MBR Consensus Submission:
+```bash
+python src/train_trocr_folds.py predict
+```
+*(Outputs `submission_trocr_5folds_mbr.csv`)*
 
-## 🎯 Architectural Summary
+### 4. Train Qwen2-VL with LoRA:
+```bash
+python Starters/VLM/trainer.py --config Starters/VLM/config.yaml
+python Starters/VLM/inference.py --config Starters/VLM/config.yaml
+```
 
-### 1. Data Preprocessing & Scaling (`src/preprocessing.py`)
-- **CLAHE Enhancement**: Applied `clipLimit=2.0, tileGridSize=(8,8)` to sharpen faded iron gall ink loops without blowing out paper background.
-- **Dimensional Standardization**: 100% of images normalized to $H=128\text{px}$ with proportional width scaling ($W = \text{round}(128 \times \text{Aspect Ratio})$), preserving natural handwriting stroke shapes.
-
-### 2. Validation Strategy (`src/create_stratified_folds.py`)
-- **Stratified 5-Fold Cross-Validation**: Binned text lengths into 5 quantile categories ($0-20\%$, $20-40\%$, $40-60\%$, $60-80\%$, $80-100\%$).
-- **Mean Text Length Variance**: $\le 0.25$ characters across all 5 folds, preventing long-sentence validation skew.
-
-### 3. Model Architecture (`src/model.py`)
-- **Feature Backbone**: ResNet-18 with modified `(2, 1)` strides in `layer2..4` for exact **$4\times$ width downsampling**.
-- **Sequence Modeler**: 2-layer Bidirectional LSTM (512 hidden size).
-- **Output Head**: Linear projection to 76 vocabulary tokens + PyTorch `nn.CTCLoss`.
-
-### 4. Official Zindi Metric Engine (`src/metrics.py`)
-- **Metric Formula**:
-  $$\text{Final Score} = 0.5 \times \text{Weighted CER} + 0.5 \times \text{Weighted WER}$$
-- Errors and lengths are accumulated globally across all reference lines.
+### 5. Multi-Architecture MBR Consensus:
+```bash
+python src/mbr_consensus.py submission_trocr_5folds_mbr.csv Starters/VLM/submission_vlm_7b.csv submission_final.csv
+```
 
 ---
 
